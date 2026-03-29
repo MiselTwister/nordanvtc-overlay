@@ -1,11 +1,13 @@
 name: Build Nordan Overlay
 
-# This tells GitHub to run the build every time you push to 'main'
-# 'workflow_dispatch' also adds a button to let you run it manually.
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+# 🛠️ PRO FIX: Explicitly grant the cloud bot permission to publish releases
+permissions:
+  contents: write
 
 jobs:
   build-tauri:
@@ -22,6 +24,8 @@ jobs:
 
       - name: Install Rust Environment
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - name: Install Dependencies
         run: npm install
@@ -31,9 +35,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # This automatically creates a GitHub Release with your .exe
           tagName: v__VERSION__ 
           releaseName: 'Nordan VTC Overlay v__VERSION__'
           releaseBody: 'Automated cloud build of the Nordan HUD.'
-          releaseDraft: true
+          releaseDraft: false # 🛠️ PRO FIX: Changed to false so it publishes instantly
           prerelease: false
