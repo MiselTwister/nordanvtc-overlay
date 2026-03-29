@@ -9,7 +9,7 @@ const windowLabel = appWindow.label;
 const isBooting = ref(true);
 
 const settings = ref({
-  locked: true, // 🛠️ FIXED: Defaults to locked, so it hides when the game is closed!
+  locked: true, 
   themeColor: '#0088ff', 
   opacity: 0.95,
   scale: 1.0,
@@ -60,6 +60,8 @@ const handleResize = (e) => {
 };
 const stopResize = () => { isResizing = false; window.removeEventListener('mousemove', handleResize); window.removeEventListener('mouseup', stopResize); };
 
+// 🛠️ The Flawless Stealth Auto-Hide & Edit Mode
+// This ensures the HUD shows if the game is running OR if you unlock it in the Command Center!
 watch([() => truck.value.sdkActive, () => settings.value.locked], async ([isActive, isLocked]) => {
   if (windowLabel === 'main') {
     if (isActive || !isLocked) {
