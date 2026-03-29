@@ -20,7 +20,7 @@
         "transparent": true,
         "alwaysOnTop": true,
         "resizable": false,
-        "visible": false
+        "visible": true
       },
       {
         "label": "command",
