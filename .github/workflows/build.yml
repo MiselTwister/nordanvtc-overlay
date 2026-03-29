@@ -1,0 +1,39 @@
+name: Build Nordan Overlay
+
+# This tells GitHub to run the build every time you push to 'main'
+# 'workflow_dispatch' also adds a button to let you run it manually.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-tauri:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust Environment
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Compile and Build Executable
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # This automatically creates a GitHub Release with your .exe
+          tagName: v__VERSION__ 
+          releaseName: 'Nordan VTC Overlay v__VERSION__'
+          releaseBody: 'Automated cloud build of the Nordan HUD.'
+          releaseDraft: true
+          prerelease: false
