@@ -9,7 +9,7 @@ const windowLabel = appWindow.label;
 const isBooting = ref(true);
 
 const settings = ref({
-  locked: false,
+  locked: true, // 🛠️ FIXED: Defaults to locked, so it hides when the game is closed!
   themeColor: '#0088ff', 
   opacity: 0.95,
   scale: 1.0,
@@ -70,16 +70,24 @@ watch([() => truck.value.sdkActive, () => settings.value.locked], async ([isActi
   }
 }, { immediate: true });
 
+// --- 🛠️ FLAWLESS MATH CONVERSIONS ---
 const useMph = computed(() => settings.value.speedUnit === 'MPH');
-const speedMult = computed(() => useMph.value ? 0.621371 : 1);
 
-const displaySpeed = computed(() => truck.value.speed * speedMult.value);
-const displayLimit = computed(() => truck.value.limit * speedMult.value);
-const displayDist = computed(() => truck.value.routeDistance * speedMult.value);
+// 1. Speed comes in as m/s from the SCS engine. We multiply by 3.6 for KMH, or 2.23694 for MPH.
+const displaySpeed = computed(() => Math.abs(truck.value.speed * (useMph.value ? 2.23694 : 3.6)));
+
+// 2. Limit, Odometer, Distance, and Cruise come from Rust ALREADY in KM/KMH. 
+const distMult = computed(() => useMph.value ? 0.621371 : 1);
+const displayLimit = computed(() => Math.abs(truck.value.limit * 3.6 * distMult.value));
+const displayDist = computed(() => truck.value.routeDistance * distMult.value);
+const displayCruise = computed(() => truck.value.cruiseControl * 3.6 * distMult.value);
+const displayRange = computed(() => truck.value.fuelRange * distMult.value);
+const displayOdo = computed(() => truck.value.odometer * distMult.value);
+
 const isSpeeding = computed(() => displayLimit.value > 0 && displaySpeed.value > displayLimit.value + 2);
 
 const displayTemp = computed(() => settings.value.tempUnit === 'F' ? (truck.value.temp * 9/5) + 32 : truck.value.temp);
-const displayRange = computed(() => truck.value.fuelRange * speedMult.value);
+
 const displayCons = computed(() => {
   if (useMph.value) {
     return truck.value.fuelAvgCons > 0 ? (235.215 / (truck.value.fuelAvgCons * 100)).toFixed(1) : '0.0';
@@ -217,14 +225,15 @@ onMounted(async () => {
               <template v-else>
                 <div class="stat-row justify-end" v-if="settings.showGpsOdo">
                   <span class="label">ODO</span>
-                  <span class="value md">{{ Math.round(truck.odometer * speedMult).toLocaleString() }}</span>
+                  <span class="value md">{{ Math.round(displayOdo).toLocaleString() }}</span>
                 </div>
                 <div class="stat-row justify-end" v-if="settings.showCruise">
                   <span class="label">CRS</span>
-                  <span class="value md" :class="truck.cruiseControl > 0 ? 'accent' : 'lcd-dimmed'">{{ truck.cruiseControl > 0 ? Math.round(truck.cruiseControl * speedMult) : 'OFF' }}</span>
+                  <span class="value md" :class="truck.cruiseControl > 0 ? 'accent' : 'lcd-dimmed'">{{ truck.cruiseControl > 0 ? Math.round(displayCruise) : 'OFF' }}</span>
                 </div>
               </template>
             </div>
+
             <div class="fuel-module" v-if="settings.showEcoDash || settings.showFuelBar">
               <div v-if="settings.showEcoDash" class="eco-dash">
                 <div class="stat-row justify-end"><span class="label">RNG</span><span class="value sm">{{ Math.round(displayRange) }} {{useMph?'MI':'KM'}}</span></div>
@@ -237,6 +246,7 @@ onMounted(async () => {
                 </div>
               </template>
             </div>
+
           </div>
         </div>
       </div>
@@ -254,7 +264,9 @@ onMounted(async () => {
         {{ truck.sdkActive ? '● LINKED' : '○ WAITING' }}
       </div>
     </div>
+
     <div class="cmd-body scrollable">
+      
       <div class="cmd-section">
         <h3>APPEARANCE</h3>
         <div class="control-group">
@@ -272,11 +284,13 @@ onMounted(async () => {
           <input type="range" min="0" max="1" step="0.05" v-model.number="settings.opacity" class="pro-slider">
         </div>
       </div>
+
       <div class="cmd-section">
         <h3>HUD MODULES</h3>
         <div class="module-grid">
           <button class="toggle-btn" :class="{ 'btn-on': settings.showWarnLights }" @click="settings.showWarnLights = !settings.showWarnLights"><span class="indicator"></span> Warning Cluster</button>
           <button class="toggle-btn" :class="{ 'btn-on': settings.showEcoDash }" @click="settings.showEcoDash = !settings.showEcoDash"><span class="indicator"></span> Eco Dash (Range)</button>
+          
           <button class="toggle-btn" :class="{ 'btn-on': settings.showWaterTemp }" @click="settings.showWaterTemp = !settings.showWaterTemp"><span class="indicator"></span> H2O Temp</button>
           <button class="toggle-btn" :class="{ 'btn-on': settings.showRpmText }" @click="settings.showRpmText = !settings.showRpmText"><span class="indicator"></span> RPM Num</button>
           <button class="toggle-btn" :class="{ 'btn-on': settings.showLimit }" @click="settings.showLimit = !settings.showLimit"><span class="indicator"></span> Speed Limit</button>
@@ -285,6 +299,7 @@ onMounted(async () => {
           <button class="toggle-btn" :class="{ 'btn-on': settings.showGpsOdo }" @click="settings.showGpsOdo = !settings.showGpsOdo"><span class="indicator"></span> GPS/Odo</button>
           <button class="toggle-btn" :class="{ 'btn-on': settings.showFuelBar }" @click="settings.showFuelBar = !settings.showFuelBar"><span class="indicator"></span> Fuel Bar</button>
         </div>
+
         <div class="control-group mt-10">
           <span class="cmd-label">DAMAGE DISPLAY MODE</span>
           <div class="segmented-control">
@@ -294,12 +309,14 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
       <div class="cmd-section">
         <h3>VEHICLE CALIBRATION & UNITS</h3>
         <div class="control-group">
           <span class="cmd-label">SHIFT LIGHT REDLINE ({{ settings.redline }} RPM)</span>
           <input type="range" min="1500" max="3500" step="50" v-model.number="settings.redline" class="pro-slider">
         </div>
+        
         <div class="toggle-grid mt-10">
           <div class="control-group">
             <span class="cmd-label">SPEED</span>
@@ -317,9 +334,13 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
       <div class="cmd-section">
-        <button class="cmd-btn" :class="{ 'btn-danger': settings.locked }" @click="settings.locked = !settings.locked">{{ settings.locked ? '🔒 HUD FULLY LOCKED' : '🔓 HUD EDITABLE (Drag & Resize Active)' }}</button>
+        <button class="cmd-btn" :class="{ 'btn-danger': settings.locked }" @click="settings.locked = !settings.locked">
+          {{ settings.locked ? '🔒 HUD FULLY LOCKED' : '🔓 HUD EDITABLE (Drag & Resize Active)' }}
+        </button>
       </div>
+
     </div>
   </div>
 </template>
@@ -347,7 +368,7 @@ body { margin: 0; overflow: hidden; background: transparent; user-select: none; 
 .hud-wrapper { width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: scale(var(--hud-scale)); transform-origin: center center; transition: opacity 0.3s; }
 .hud-hidden { opacity: 0 !important; pointer-events: none !important; }
 
-/* 🚨 RECESSED WARNING CLUSTER */
+/* 🚨 RECESSED WARNING CLUSTER - MADE MORE VISIBLE */
 .warning-cluster { 
   background: linear-gradient(135deg, rgba(10,12,16,0.8), rgba(4,5,8,0.9));
   height: 65px; 
@@ -365,16 +386,20 @@ body { margin: 0; overflow: hidden; background: transparent; user-select: none; 
 }
 .warn-icon { 
   font-size: 14px; 
-  opacity: 0.15; 
+  opacity: 0.3; /* 🛠️ FIXED: Increased opacity so the inactive icons are clearly visible */
   filter: grayscale(100%); 
   transition: 0.3s; 
   transform: skewX(12deg); 
   line-height: 1;
 }
 .center-span { grid-column: span 2; } 
-.warn-active { opacity: 1; filter: none; animation: flash 0.5s infinite alternate; }
-.warn-yellow { text-shadow: 0 0 15px var(--warn-yellow); }
-.warn-red { text-shadow: 0 0 15px var(--danger-red); }
+.warn-active { 
+  opacity: 1 !important; 
+  filter: none !important; 
+  animation: flash 0.5s infinite alternate; 
+}
+.warn-yellow { text-shadow: 0 0 15px var(--warn-yellow); color: var(--warn-yellow); }
+.warn-red { text-shadow: 0 0 15px var(--danger-red); color: var(--danger-red); }
 
 /* --- THE EDGE-TO-EDGE CONTAINER --- */
 .hud-container { 
@@ -420,6 +445,7 @@ body { margin: 0; overflow: hidden; background: transparent; user-select: none; 
 .unit-mini { font-size: 12px; color: var(--text-dim); margin-left: 2px; }
 .accent { color: var(--brand-color) !important; text-shadow: 0 0 15px var(--brand-glow) !important; transition: 0.3s; }
 
+/* Advanced Damage */
 .adv-damage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 15px; margin-bottom: 4px;}
 .adv-dmg-item { font-family: var(--font-digital); font-size: 10px; font-weight: bold; color: var(--text-dim); }
 

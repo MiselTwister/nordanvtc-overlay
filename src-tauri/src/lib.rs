@@ -17,25 +17,20 @@ struct TelemetryPayload {
     speed: f32,
     limit: f32,
     gear: i32,
-    fuel: f32, // Percentage
-    fuelRange: f32, // Estimated Range
-    fuelAvgCons: f32, // Consumption
+    fuel: f32,
+    fuelRange: f32,
+    fuelAvgCons: f32,
     temp: f32,
-    
-    // Advanced Damage
     damageEngine: f32,
     damageTrans: f32,
     damageCabin: f32,
     damageChassis: f32,
     damageWheels: f32,
-    
     rpm: f32,
     cruiseControl: f32,
     odometer: f32,
     routeDistance: f32,
     routeTime: f32,
-
-    // Warning Lights
     parkBrake: bool,
     airPressureEmerg: bool,
     oilPressWarning: bool,
@@ -62,7 +57,6 @@ pub fn run() {
                 unsafe {
                     let mut handle: HANDLE = HANDLE::default();
                     
-                    println!("Searching for Nordan VTC Telemetry...");
                     loop {
                         handle = OpenFileMappingW(
                             FILE_MAP_READ.0, 
@@ -73,8 +67,6 @@ pub fn run() {
                         if !handle.is_invalid() { break; }
                         thread::sleep(Duration::from_secs(2));
                     }
-
-                    println!("🔗 Linked to ETS2/ATS Engine!");
 
                     let map_ptr = MapViewOfFile(handle, FILE_MAP_READ, 0, 0, 0);
                     if map_ptr.Value.is_null() { return; }
@@ -105,7 +97,7 @@ pub fn run() {
                         let route_time_ptr = base_ptr.add(1064) as *const f32;
                         let speed_limit_ptr = base_ptr.add(1068) as *const f32;
 
-                        // Warning Bools (Offset 1500 + 66 = 1566)
+                        // Warning Bools
                         let park_brake = ptr::read_unaligned(base_ptr.add(1566) as *const u8) != 0;
                         let air_emerg = ptr::read_unaligned(base_ptr.add(1569) as *const u8) != 0;
                         let oil_warn = ptr::read_unaligned(base_ptr.add(1572) as *const u8) != 0;
@@ -117,11 +109,11 @@ pub fn run() {
 
                         let payload = TelemetryPayload {
                             sdkActive: sdk_active,
-                            speed: ptr::read_unaligned(speed_ptr),
-                            limit: ptr::read_unaligned(speed_limit_ptr) * 3.6, 
+                            speed: ptr::read_unaligned(speed_ptr), 
+                            limit: ptr::read_unaligned(speed_limit_ptr), 
                             gear: ptr::read_unaligned(gear_ptr),
                             fuel: (fuel_liters / fuel_capacity) * 100.0,
-                            fuelRange: ptr::read_unaligned(fuel_range_ptr) / 1000.0, // m to km
+                            fuelRange: ptr::read_unaligned(fuel_range_ptr) / 1000.0, 
                             fuelAvgCons: ptr::read_unaligned(fuel_cons_ptr),
                             temp: ptr::read_unaligned(water_temp_ptr),
                             
@@ -132,7 +124,7 @@ pub fn run() {
                             damageWheels: ptr::read_unaligned(wear_wheels) * 100.0,
 
                             rpm: ptr::read_unaligned(rpm_ptr),
-                            cruiseControl: ptr::read_unaligned(cruise_ptr) * 3.6, 
+                            cruiseControl: ptr::read_unaligned(cruise_ptr), 
                             odometer: ptr::read_unaligned(odometer_ptr),
                             routeDistance: ptr::read_unaligned(route_dist_ptr) / 1000.0, 
                             routeTime: ptr::read_unaligned(route_time_ptr),
