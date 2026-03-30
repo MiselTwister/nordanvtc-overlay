@@ -72,10 +72,28 @@ pub fn run() {
                     if map_ptr.Value.is_null() { return; }
 
                     let base_ptr = map_ptr.Value as *const u8;
+                    
+                    // 🛠️ TIME FREEZE VARIABLES
+                    let mut last_time: u64 = 0;
+                    let mut unchanged_counter: i32 = 0;
 
                     loop {
-                        let sdk_active = ptr::read_unaligned(base_ptr.add(0) as *const u8) != 0;
+                        let sdk_active_raw = ptr::read_unaligned(base_ptr.add(0) as *const u8) != 0;
+                        let current_time = ptr::read_unaligned(base_ptr.add(8) as *const u64);
                         
+                        let mut is_active = sdk_active_raw;
+
+                        // 🛠️ TIME FREEZE DETECTOR: Hides HUD if game is closed or paused
+                        if current_time == last_time && current_time != 0 {
+                            unchanged_counter += 1;
+                            if unchanged_counter > 30 { // Approx 1 second of frozen time
+                                is_active = false;
+                            }
+                        } else {
+                            unchanged_counter = 0;
+                        }
+                        last_time = current_time;
+
                         let gear_ptr = base_ptr.add(504) as *const i32;
                         let fuel_capacity_ptr = base_ptr.add(704) as *const f32;
                         let speed_ptr = base_ptr.add(948) as *const f32;
@@ -108,7 +126,7 @@ pub fn run() {
                         let fuel_liters = ptr::read_unaligned(fuel_liters_ptr);
 
                         let payload = TelemetryPayload {
-                            sdkActive: sdk_active,
+                            sdkActive: is_active, // Uses the frozen time logic!
                             speed: ptr::read_unaligned(speed_ptr), 
                             limit: ptr::read_unaligned(speed_limit_ptr), 
                             gear: ptr::read_unaligned(gear_ptr),

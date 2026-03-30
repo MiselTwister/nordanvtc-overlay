@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from "vue";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { PhysicalPosition } from "@tauri-apps/api/dpi"; // 🛠️ Required to manipulate OS window coordinates
 
 const appWindow = getCurrentWindow(); 
 const windowLabel = appWindow.label; 
@@ -39,12 +40,23 @@ const truck = ref({
   parkBrake: false, airPressureEmerg: false, oilPressWarning: false, waterTempWarning: false, battVoltWarning: false
 });
 
+// 💾 LOAD SAVED SETTINGS FROM DISK
+const savedSettings = localStorage.getItem('nordan_settings');
+if (savedSettings) {
+  try {
+    settings.value = { ...settings.value, ...JSON.parse(savedSettings) };
+  } catch(e) {}
+}
+
 if (windowLabel === 'command') {
+  // 💾 SAVE SETTINGS TO DISK WHENEVER CHANGED
   watch(settings, (newSettings) => {
+    localStorage.setItem('nordan_settings', JSON.stringify(newSettings));
     emitTo('main', 'cmd-sync-settings', newSettings);
   }, { deep: true });
 }
 
+// Drag & Resize
 const startDrag = () => { if (!settings.value.locked) appWindow.startDragging(); };
 let isResizing = false; let startX = 0; let initialScale = 1.0;
 const startResize = (e) => {
@@ -60,8 +72,18 @@ const handleResize = (e) => {
 };
 const stopResize = () => { isResizing = false; window.removeEventListener('mousemove', handleResize); window.removeEventListener('mouseup', stopResize); };
 
-// 🛠️ The Flawless Stealth Auto-Hide & Edit Mode
-// This ensures the HUD shows if the game is running OR if you unlock it in the Command Center!
+// 💾 SAVE WINDOW POSITION WHEN USER LOCKS THE HUD
+watch(() => settings.value.locked, async (isLocked) => {
+  if (windowLabel === 'main' && isLocked) {
+    try {
+      const pos = await appWindow.outerPosition();
+      localStorage.setItem('nordan_hud_x', pos.x.toString());
+      localStorage.setItem('nordan_hud_y', pos.y.toString());
+    } catch(e) {}
+  }
+});
+
+// Auto-Hide based on Game Activity
 watch([() => truck.value.sdkActive, () => settings.value.locked], async ([isActive, isLocked]) => {
   if (windowLabel === 'main') {
     if (isActive || !isLocked) {
@@ -72,22 +94,16 @@ watch([() => truck.value.sdkActive, () => settings.value.locked], async ([isActi
   }
 }, { immediate: true });
 
-// --- 🛠️ FLAWLESS MATH CONVERSIONS ---
+// --- MATH CONVERSIONS ---
 const useMph = computed(() => settings.value.speedUnit === 'MPH');
-
-// 1. Speed comes in as m/s from the SCS engine. We multiply by 3.6 for KMH, or 2.23694 for MPH.
 const displaySpeed = computed(() => Math.abs(truck.value.speed * (useMph.value ? 2.23694 : 3.6)));
-
-// 2. Limit, Odometer, Distance, and Cruise come from Rust ALREADY in KM/KMH. 
 const distMult = computed(() => useMph.value ? 0.621371 : 1);
 const displayLimit = computed(() => Math.abs(truck.value.limit * 3.6 * distMult.value));
 const displayDist = computed(() => truck.value.routeDistance * distMult.value);
 const displayCruise = computed(() => truck.value.cruiseControl * 3.6 * distMult.value);
 const displayRange = computed(() => truck.value.fuelRange * distMult.value);
 const displayOdo = computed(() => truck.value.odometer * distMult.value);
-
 const isSpeeding = computed(() => displayLimit.value > 0 && displaySpeed.value > displayLimit.value + 2);
-
 const displayTemp = computed(() => settings.value.tempUnit === 'F' ? (truck.value.temp * 9/5) + 32 : truck.value.temp);
 
 const displayCons = computed(() => {
@@ -135,7 +151,17 @@ const hudStyles = computed(() => ({
 
 onMounted(async () => {
   setTimeout(() => { isBooting.value = false; }, 800);
+  
   if (windowLabel === 'main') {
+    // 💾 LOAD HUD POSITION ON BOOT
+    try {
+      const x = localStorage.getItem('nordan_hud_x');
+      const y = localStorage.getItem('nordan_hud_y');
+      if (x !== null && y !== null) {
+        await appWindow.setPosition(new PhysicalPosition(parseInt(x), parseInt(y)));
+      }
+    } catch(e) { console.warn("Failed to load position", e); }
+
     try {
       await listen("telemetry-update", (event) => { truck.value = event.payload; });
       await listen("cmd-sync-settings", (event) => { settings.value = event.payload; });
